@@ -1,0 +1,37 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "schedule": {
+        "data": {
+          "default_schedule": "Default schedule"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "target": "Edit"
+        }
+      },
+      "edit_schedule": {
+        "data": {
+          "schedule": "Schedule"
+        }
+      },
+      "settings": {
+        "data": {
+          "days_ahead": "Days ahead",
+          "scan_interval_min": "Refresh interval (minutes)"
+        }
+      }
+    }
+  }
+}

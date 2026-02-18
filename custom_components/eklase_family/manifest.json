@@ -1,0 +1,12 @@
+{
+  "domain": "eklase_family",
+  "name": "E-klase (Family)",
+  "version": "0.1.0",
+  "config_flow": true,
+  "documentation": "https://github.com/juvies/eklase",
+  "issue_tracker": "https://github.com/juvies/eklase/issues",
+  "requirements": [],
+  "codeowners": ["@juvies"],
+  "iot_class": "cloud_polling",
+  "loggers": ["custom_components.eklase_family"]
+}

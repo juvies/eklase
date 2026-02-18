@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "E-klase",
+        "description": "Ievadi E-klases piekļuvi un stundu laikus.",
+        "CONF_REFRESH_INTERVAL": "Atjaunošanas intervāls (minūtēs)",
+        "data": {
+          "username": "Lietotājvārds",
+          "password": "Parole",
+          "l1_start": "1. stunda sākas",
+          "l1_end": "1. stunda beidzas",
+          "l2_start": "2. stunda sākas",
+          "l2_end": "2. stunda beidzas",
+          "l3_start": "3. stunda sākas",
+          "l3_end": "3. stunda beidzas",
+          "l4_start": "4. stunda sākas",
+          "l4_end": "4. stunda beidzas",
+          "l5_start": "5. stunda sākas",
+          "l5_end": "5. stunda beidzas",
+          "l6_start": "6. stunda sākas",
+          "l6_end": "6. stunda beidzas",
+          "l7_start": "7. stunda sākas",
+          "l7_end": "7. stunda beidzas",
+          "l8_start": "8. stunda sākas",
+          "l8_end": "8. stunda beidzas",
+          "l9_start": "9. stunda sākas",
+          "l9_end": "9. stunda beidzas",
+          "l10_start": "10. stunda sākas",
+          "l10_end": "10. stunda beidzas"
+        }
+      }
+    }
+  }
+}
