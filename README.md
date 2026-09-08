@@ -19,7 +19,7 @@ Notikuma **Description** laukā tiek ielikts:
 - 📅 Kalendārs ar stundu grafiku (no E-klase diary)
 - 🔁 Automātiska atjaunošana pēc konfigurējama intervāla
 - 🌙 Nakts režīms: no **00:00 līdz 06:00** refresh tiek izlaists
-- 👀 “Watch” režīms: rēķina checksum šodienai/rītdienai (vai N dienām) pēc `lastModification.timeModified`, lai varētu triggerēt automatizācijas, ja stundu saraksts ir mainīts
+- 👀 “Watch” režīms: salīdzina katra skolēna pirmo stundu šodienai/rītdienai (vai N dienām) un ziņo, ja diena sākas agrāk vai vēlāk.
 
 ---
 
@@ -93,8 +93,48 @@ Papildus atribūti (`extra_state_attributes`):
 - `last_refresh` – pēdējā refresh laiks (ISO)
 - `watch_days` – cik dienas tiek “watch-ots”
 - `watch_from` – sākuma datums (parasti šodiena)
-- `watch_modified` – `true/false` vai checksum atšķiras pret iepriekšējo reizi
+- `watch_modified` – `true`, ja pēdējā veiksmīgajā datu ielādē konstatēta pirmās stundas sākuma maiņa
+- `watch_revision` – palielinās katrā ielādē, kurā konstatētas šādas izmaiņas
+- `watch_changes` – pēdējā ielādē konstatēto izmaiņu saraksts ar skolēnu, datumu, veco/jauno stundas numuru un sākuma laiku
 - `diary_days_by_profile` – cik dienas ielādētas katram profilam
+
+---
+
+## Brīdinājumi par pirmo stundu
+
+Ar `watch_days: 2` tiek pārbaudīta **šodiena un rītdiena**. Aiznākamās dienas
+izmaiņas paziņojumu nerada. Tālāko ielādēto dienu sākuma stundas tiek saglabātas,
+lai tās būtu pieejamas salīdzināšanai, kad šie datumi nonāk novērošanas periodā.
+
+Tiek salīdzināta pirmā reālā stunda pēc `lessonNumber`, arī tad, ja atceltā stunda
+vienkārši pazūd no atbildes. Sākuma laiku iegūst no skolēna individuālā vai kopīgā
+grafika. Kabinetu, priekšmeta, mājasdarbu un vēlāko stundu izmaiņas šo brīdinājumu
+nerada. Izmaiņas tikai konfigurētajos zvanu laikos arī nerada brīdinājumu.
+
+Pirmā ielāde pēc pārejas no vecās `timeModified` loģikas izveido sākuma datus bez
+brīdinājuma. Tie saglabājas pāri restartiem. Jauns datums pats par sevi nav izmaiņa.
+Tukša vai trūkstoša diena saglabā iepriekšējo sākuma stundu un netiek uzskatīta par
+atcelšanu — tādēļ šis mehānisms nepaziņo arī par visas mācību dienas atcelšanu.
+
+**Ieteicamais automatizācijas trigeris** ir notikums, nevis `watch_modified`
+pāreja uz `true`: notikums rodas arī divās secīgās ielādēs ar izmaiņām.
+Esošajā automatizācijā nomaini trigeri uz:
+
+```yaml
+trigger: event
+event_type: eklase_family_first_lesson_changed
+```
+
+Paziņojuma darbības `message` laukā var izmantot:
+
+```yaml
+message: "{{ trigger.event.data.message }}"
+```
+
+Piemērs: `Anna (2026-09-09): pirmā stunda tagad 09:20, iepriekš 08:30.`
+Notikuma datos ir arī `entry_id` un `changes` saraksts. Ja ir vairāki E-klases
+integrācijas ieraksti, trigerim var pievienot `event_data` filtru ar attiecīgo
+`entry_id`. Integrācija pati telefona paziņojumus nesūta.
 
 ---
 

@@ -268,6 +268,8 @@ class EklaseFamilyCalendar(CoordinatorEntity, CalendarEntity):
             "watch_days": data.get("watch_days"),
             "watch_from": data.get("watch_from"),
             "watch_modified": data.get("watch_modified"),
+            "watch_revision": data.get("watch_revision", 0),
+            "watch_changes": data.get("watch_changes", []),
         }
 
 
