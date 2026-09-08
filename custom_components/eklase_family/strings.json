@@ -3,33 +3,113 @@
     "step": {
       "user": {
         "title": "E-klase",
-        "description": "Ievadi E-klases piekļuvi un stundu laikus.",
-        "CONF_REFRESH_INTERVAL": "Atjaunošanas intervāls (minūtēs)",
+        "description": "Enter your credentials and shared lesson times. After loading, individual times can be set in options.",
         "data": {
-          "username": "Lietotājvārds",
-          "password": "Parole",
-          "l1_start": "1. stunda sākas",
-          "l1_end": "1. stunda beidzas",
-          "l2_start": "2. stunda sākas",
-          "l2_end": "2. stunda beidzas",
-          "l3_start": "3. stunda sākas",
-          "l3_end": "3. stunda beidzas",
-          "l4_start": "4. stunda sākas",
-          "l4_end": "4. stunda beidzas",
-          "l5_start": "5. stunda sākas",
-          "l5_end": "5. stunda beidzas",
-          "l6_start": "6. stunda sākas",
-          "l6_end": "6. stunda beidzas",
-          "l7_start": "7. stunda sākas",
-          "l7_end": "7. stunda beidzas",
-          "l8_start": "8. stunda sākas",
-          "l8_end": "8. stunda beidzas",
-          "l9_start": "9. stunda sākas",
-          "l9_end": "9. stunda beidzas",
-          "l10_start": "10. stunda sākas",
-          "l10_end": "10. stunda beidzas"
+          "username": "Username",
+          "password": "Password",
+          "refresh_interval": "Refresh interval (minutes)",
+          "watch_days": "Days to check for changes",
+          "l1_start": "Lesson 1 start",
+          "l1_end": "Lesson 1 end",
+          "l2_start": "Lesson 2 start",
+          "l2_end": "Lesson 2 end",
+          "l3_start": "Lesson 3 start",
+          "l3_end": "Lesson 3 end",
+          "l4_start": "Lesson 4 start",
+          "l4_end": "Lesson 4 end",
+          "l5_start": "Lesson 5 start",
+          "l5_end": "Lesson 5 end",
+          "l6_start": "Lesson 6 start",
+          "l6_end": "Lesson 6 end",
+          "l7_start": "Lesson 7 start",
+          "l7_end": "Lesson 7 end",
+          "l8_start": "Lesson 8 start",
+          "l8_end": "Lesson 8 end",
+          "l9_start": "Lesson 9 start",
+          "l9_end": "Lesson 9 end",
+          "l10_start": "Lesson 10 start",
+          "l10_end": "Lesson 10 end"
         }
       }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E-klase",
+        "menu_options": {
+          "settings": "Account and shared lesson times",
+          "student": "Student lesson times"
+        }
+      },
+      "settings": {
+        "title": "Account and shared lesson times",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "refresh_interval": "Refresh interval (minutes)",
+          "watch_days": "Days to check for changes",
+          "l1_start": "Lesson 1 start",
+          "l1_end": "Lesson 1 end",
+          "l2_start": "Lesson 2 start",
+          "l2_end": "Lesson 2 end",
+          "l3_start": "Lesson 3 start",
+          "l3_end": "Lesson 3 end",
+          "l4_start": "Lesson 4 start",
+          "l4_end": "Lesson 4 end",
+          "l5_start": "Lesson 5 start",
+          "l5_end": "Lesson 5 end",
+          "l6_start": "Lesson 6 start",
+          "l6_end": "Lesson 6 end",
+          "l7_start": "Lesson 7 start",
+          "l7_end": "Lesson 7 end",
+          "l8_start": "Lesson 8 start",
+          "l8_end": "Lesson 8 end",
+          "l9_start": "Lesson 9 start",
+          "l9_end": "Lesson 9 end",
+          "l10_start": "Lesson 10 start",
+          "l10_end": "Lesson 10 end"
+        }
+      },
+      "student": {
+        "title": "Select student",
+        "data": {
+          "profile_id": "Student"
+        }
+      },
+      "student_times": {
+        "title": "{student}",
+        "description": "Enter times in HH:MM format. Select the checkbox to remove this student’s individual times and use the shared schedule.",
+        "data": {
+          "use_default": "Use shared lesson times",
+          "l1_start": "Lesson 1 start",
+          "l1_end": "Lesson 1 end",
+          "l2_start": "Lesson 2 start",
+          "l2_end": "Lesson 2 end",
+          "l3_start": "Lesson 3 start",
+          "l3_end": "Lesson 3 end",
+          "l4_start": "Lesson 4 start",
+          "l4_end": "Lesson 4 end",
+          "l5_start": "Lesson 5 start",
+          "l5_end": "Lesson 5 end",
+          "l6_start": "Lesson 6 start",
+          "l6_end": "Lesson 6 end",
+          "l7_start": "Lesson 7 start",
+          "l7_end": "Lesson 7 end",
+          "l8_start": "Lesson 8 start",
+          "l8_end": "Lesson 8 end",
+          "l9_start": "Lesson 9 start",
+          "l9_end": "Lesson 9 end",
+          "l10_start": "Lesson 10 start",
+          "l10_end": "Lesson 10 end"
+        }
+      }
+    },
+    "error": {
+      "invalid_times": "Enter all lesson times in HH:MM format, with each end after its start."
+    },
+    "abort": {
+      "no_profiles": "No student profiles are loaded. Check that the integration has loaded successfully, then try again."
     }
   }
 }

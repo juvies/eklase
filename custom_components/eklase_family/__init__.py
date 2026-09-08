@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import EklaseApiClient
@@ -13,6 +13,7 @@ from .const import (
     CONF_USERNAME,
     CONF_PASSWORD,
     CONF_LESSON_TIMES,
+    CONF_PROFILE_LESSON_TIMES,
     CONF_REFRESH_INTERVAL,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DEFAULT_LESSON_TIMES,
@@ -66,6 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "client": client,
         "coordinator": coordinator,
         "lesson_times": _get_lesson_times(entry),
+        CONF_PROFILE_LESSON_TIMES: entry.data.get(CONF_PROFILE_LESSON_TIMES, {}),
     }
 
     # to see if refresh interval and lesson times are correctly read from config at startup
@@ -79,30 +81,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await client.ensure_token()
     await coordinator.async_config_entry_first_refresh()
 
-    @callback
-    def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry) -> None:
-        """Saucas, kad options/data tiek izmainīti (OptionsFlow saglabā)."""
-        data = hass.data[DOMAIN][updated_entry.entry_id]
-        cli: EklaseApiClient = data["client"]
-        coord: EklaseCoordinator = data["coordinator"]
-
-        # 1) credentials
-        new_username = updated_entry.data.get(CONF_USERNAME, "")
-        new_password = updated_entry.data.get(CONF_PASSWORD, "")
-        cli.set_credentials(new_username, new_password)
-
-        # 2) lesson times
-        data["lesson_times"] = _get_lesson_times(updated_entry)
-
-        # 3) refresh interval
-        coord.apply_options(updated_entry)
-        coord.async_request_refresh()
-
-        _LOGGER.warning(
-            "E-klase options updated: refresh=%s min, lesson_times=%s",
-            _get_refresh_minutes(updated_entry),
-            len(data["lesson_times"]),
-        )
+    async def _update_listener(hass: HomeAssistant, updated_entry: ConfigEntry) -> None:
+        """Reload entities and the client after configuration changes."""
+        await hass.config_entries.async_reload(updated_entry.entry_id)
 
     entry.async_on_unload(entry.add_update_listener(_update_listener))
 

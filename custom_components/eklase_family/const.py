@@ -5,6 +5,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
 CONF_LESSON_TIMES = "lesson_times"
+CONF_PROFILE_LESSON_TIMES = "profile_lesson_times"
 CONF_REFRESH_INTERVAL = "refresh_interval"
 
 # how often to refresh data from E-klase (default: 60 min)

@@ -60,6 +60,21 @@ Pievienojot integrāciju, tiks prasīts:
 
 Pēc saglabāšanas integrācija pārlādēsies automātiski.
 
+### Atšķirīgi stundu laiki katram skolēnam
+
+1. Pēc integrācijas ielādes atver tās **Configure / Konfigurēt** iestatījumus.
+2. Izvēlies **Skolēna stundu laiki**, tad vajadzīgo skolēnu.
+3. Norādi šī skolēna stundu sākuma un beigu laikus formātā **HH:MM** un saglabā.
+4. Atkārto otram skolēnam, ja arī viņam nepieciešami individuāli laiki.
+
+Katrs grafiks tiek piesaistīts E-klases profila ID. Kalendārs paliek kopīgs, bet
+katra skolēna notikumiem tiek izmantoti viņa stundu laiki. Esošie iestatījumi
+joprojām darbojas: skolēni bez individuāla grafika izmanto kopīgos stundu laikus.
+
+Lai atgrieztos pie kopīgā grafika, skolēna laiku formā atzīmē
+**Izmantot kopīgos stundu laikus** un saglabā. Kopīgo grafiku un konta
+iestatījumus var mainīt sadaļā **Konts un kopīgie stundu laiki**.
+
 ---
 
 ## Kalendāra notikumu formāts

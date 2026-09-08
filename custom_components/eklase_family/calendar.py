@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, date, time
 from typing import Any
+import json
 import logging
 import re
 import html as html_lib
@@ -13,7 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_PROFILE_LESSON_TIMES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,9 +84,13 @@ class EklaseFamilyCalendar(CoordinatorEntity, CalendarEntity):
     _attr_has_entity_name = True
     _attr_name = "E-klase"
 
-    def __init__(self, coordinator, lesson_times: list[dict[str, str]], entry_id: str) -> None:
+    def __init__(
+        self, coordinator, lesson_times: list[dict[str, str]], entry_id: str,
+        profile_lesson_times: dict[str, list[dict[str, str]]] | None = None,
+    ) -> None:
         super().__init__(coordinator)
         self._lesson_times = lesson_times or []
+        self._profile_lesson_times = profile_lesson_times or {}
         self._attr_unique_id = f"eklase_family_calendar_{entry_id}"
 
         self._cache_key: str | None = None
@@ -105,14 +110,10 @@ class EklaseFamilyCalendar(CoordinatorEntity, CalendarEntity):
     def _build_event_rows(self) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         data: dict[str, Any] = self.coordinator.data or {}
 
-        lt_sig = ""
-        if self._lesson_times:
-            lt_sig = (
-                f"{self._lesson_times[0].get('start','')}-{self._lesson_times[0].get('end','')};"
-                f"{self._lesson_times[-1].get('start','')}-{self._lesson_times[-1].get('end','')}"
-            )
-
-        cache_key = f"{data.get('_last_refresh') or ''}|lt={len(self._lesson_times)}|sig={lt_sig}"
+        times_signature = json.dumps(
+            [self._lesson_times, self._profile_lesson_times], sort_keys=True
+        )
+        cache_key = f"{data.get('_last_refresh') or ''}|{times_signature}"
         if cache_key and cache_key == self._cache_key:
             return self._cached_rows, self._cached_diag
 
@@ -136,8 +137,6 @@ class EklaseFamilyCalendar(CoordinatorEntity, CalendarEntity):
             who = (f"{fn} {ln}").strip()
             prof_label[pid] = f"{who} — {descr}".strip(" —")
 
-        times_by_no = {i + 1: lt for i, lt in enumerate(self._lesson_times)}
-
         rows: list[dict[str, Any]] = []
 
         max_lesson_no_seen = 0
@@ -147,6 +146,8 @@ class EklaseFamilyCalendar(CoordinatorEntity, CalendarEntity):
         first_nonempty: dict[str, Any] | None = None
 
         for pid, diary in diary_by_profile.items():
+            lesson_times = self._profile_lesson_times.get(str(pid), self._lesson_times)
+            times_by_no = {i + 1: lt for i, lt in enumerate(lesson_times)}
             label = prof_label.get(str(pid), str(pid))
             student_name = profile_names.get(str(pid), str(pid))
 
@@ -278,4 +279,7 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator = data["coordinator"]
     lesson_times = data["lesson_times"]
-    async_add_entities([EklaseFamilyCalendar(coordinator, lesson_times, entry.entry_id)])
+    async_add_entities([EklaseFamilyCalendar(
+        coordinator, lesson_times, entry.entry_id,
+        data.get(CONF_PROFILE_LESSON_TIMES, {}),
+    )])
