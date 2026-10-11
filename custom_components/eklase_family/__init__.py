@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .api import EklaseApiClient
 from .const import (
@@ -51,7 +51,8 @@ def _get_refresh_minutes(entry: ConfigEntry) -> int:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    session = async_get_clientsession(hass)
+    # Keep login/CSRF cookies isolated from other integrations and accounts.
+    session = async_create_clientsession(hass)
 
     client = EklaseApiClient(
         session=session,

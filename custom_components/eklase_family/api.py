@@ -11,10 +11,11 @@ import urllib.parse
 import aiohttp
 
 
-AUTH_BASE = "https://auth.e-klase.lv/realms/family/protocol/openid-connect"
-AUTH_URL = f"{AUTH_BASE}/auth"
-AUTHENTICATE_URL = f"{AUTH_BASE}/authenticate"
-AUTHENTICATE_FORWARD_URL = f"{AUTH_BASE}/authenticate-forward"
+# Published by https://family.e-klase.lv/api/auth-config and its OIDC discovery URL.
+AUTH_BASE = "https://auth.e-klase.lv/connect"
+AUTH_URL = f"{AUTH_BASE}/authorize"
+LOGIN_URL = f"{AUTH_BASE}/login"
+CSRF_URL = f"{LOGIN_URL}/token"
 TOKEN_URL = f"{AUTH_BASE}/token"
 
 API_BASE = "https://family.e-klase.lv/api"
@@ -115,21 +116,22 @@ class EklaseApiClient:
         """
         for _ in range(max_hops):
             parsed = urllib.parse.urlparse(url)
-            if parsed.netloc == REDIRECT_HOST and parsed.path == REDIRECT_PATH:
+            if (
+                parsed.scheme == "https"
+                and parsed.netloc == REDIRECT_HOST
+                and parsed.path == REDIRECT_PATH
+            ):
                 return url
 
             async with self._s.get(url, allow_redirects=False) as r:
                 if r.status in (301, 302, 303, 307, 308):
                     loc = r.headers.get("Location")
                     if not loc:
-                        raise EklaseAuthError(f"Redirect without Location from {url}")
+                        raise EklaseAuthError("Redirect without Location during login")
                     url = urllib.parse.urljoin(url, loc)
                     continue
 
-                text = await r.text()
-                raise EklaseAuthError(
-                    f"Redirect flow stopped at {url} HTTP {r.status}, body: {text[:300]!r}"
-                )
+                raise EklaseAuthError(f"Login redirect flow stopped: HTTP {r.status}")
 
         raise EklaseAuthError("Too many redirects while completing login flow")
 
@@ -140,7 +142,7 @@ class EklaseApiClient:
 
         # 1) Start authorize flow (sets cookies / initializes flow)
         params = {
-            "scope": "openid",
+            "scope": "openid offline_access",
             "response_type": "code",
             "client_id": CLIENT_ID,
             "redirect_uri": REDIRECT_URI,
@@ -151,59 +153,33 @@ class EklaseApiClient:
             "code_challenge_method": "S256",
         }
 
-        # it is okay to allow redirects here, because we just want to end up at the login page with cookies set
-        async with self._s.get(AUTH_URL, params=params, allow_redirects=True) as r:
+        # Use exactly the same authorization request after the login cookie is set.
+        authorize_url = f"{AUTH_URL}?{urllib.parse.urlencode(params)}"
+        async with self._s.get(authorize_url, allow_redirects=True) as r:
             if r.status >= 400:
-                text = await r.text()
-                raise EklaseAuthError(f"Auth start failed: HTTP {r.status}, body: {text[:300]!r}")
+                raise EklaseAuthError(f"Auth start failed: HTTP {r.status}")
 
-        # 2) Submit credentials
-        # SVARĪGI: te liekam "tīru" URL, nevis jau %C4%81 u.tml.
-        login_form = {
-            "clientId": CLIENT_ID,
-            "username": self._username,
-            "password": self._password,
-            "UserFeedbackUrl": "https://my.e-klase.lv/Pieteikums_tehnisk%C4%81_atbalsta_dienestam",
-        }
+        # The current login page obtains a CSRF token and submits JSON credentials.
+        # Both requests must use the same cookie jar as the authorization requests.
+        async with self._s.get(CSRF_URL, allow_redirects=False) as r:
+            if r.status != 200:
+                raise EklaseAuthError(f"Login CSRF token failed: HTTP {r.status}")
+            csrf = await r.json()
+        csrf_token = csrf.get("token") if isinstance(csrf, dict) else None
+        if not isinstance(csrf_token, str) or not csrf_token:
+            raise EklaseAuthError("Login CSRF response did not contain a token")
 
-        loc: str | None = None
+        async with self._s.post(
+            LOGIN_URL,
+            json={"username": self._username, "password": self._password},
+            headers={"X-CSRF-TOKEN": csrf_token},
+            allow_redirects=False,
+        ) as r:
+            if r.status != 200:
+                raise EklaseAuthError(f"Login failed: HTTP {r.status}")
 
-        async with self._s.post(AUTHENTICATE_URL, data=login_form, allow_redirects=False) as r:
-            if r.status in (301, 302, 303, 307, 308):
-                loc = r.headers.get("Location")
-                if not loc:
-                    raise EklaseAuthError("Login redirect missing Location header")
-
-            elif r.status == 200:
-                # this often an intermediate step: the UI then does GET /authenticate-forward
-                # try to detect obvious login failure here, so that we don't do the whole redirect dance for nothing.
-                html = await r.text()
-                # if we see that password was wrong, then likely the whole flow will fail (no code, no tokens), so we can error out immediately with a clear message.
-                lowered = html.lower()
-                # even if there is an error still try forward, because sometimes there is some weird intermediate page that contains "incorrect password" text but then redirects to the code page anyway (?!)
-                # if forward does not work either, then we will report the error there with the full HTML body for debugging.
-
-            else:
-                text = await r.text()
-                raise EklaseAuthError(f"Login failed: HTTP {r.status}, body: {text[:300]!r}")
-
-        # 3) if not 302, then try forward endpoint that is called by the UI after login; it should redirect to the code page, but if login failed, then it might not redirect (e.g. it might return 200 with some HTML that contains "incorrect password" or something)
-        if not loc:
-            async with self._s.get(AUTHENTICATE_FORWARD_URL, allow_redirects=False) as r2:
-                if r2.status in (301, 302, 303, 307, 308):
-                    loc = r2.headers.get("Location")
-                    if not loc:
-                        raise EklaseAuthError("authenticate-forward redirect missing Location")
-                else:
-                    body = await r2.text()
-                    raise EklaseAuthError(
-                        f"Login returned 200 (HTML) and authenticate-forward did not redirect: "
-                        f"HTTP {r2.status}, body: {body[:300]!r}"
-                    )
-
-        # 4) Follow redirects until redirect.html?code=...
-        start_url = urllib.parse.urljoin(AUTHENTICATE_URL, loc)
-        final_loc = await self._follow_redirects_for_code(start_url)
+        # The browser returns to /connect/authorize after a successful login.
+        final_loc = await self._follow_redirects_for_code(authorize_url)
 
         parsed = urllib.parse.urlparse(final_loc)
         q = urllib.parse.parse_qs(parsed.query)
@@ -211,11 +187,11 @@ class EklaseApiClient:
         st = (q.get("state") or [None])[0]
 
         if not code:
-            raise EklaseAuthError(f"No authorization code in redirect Location: {final_loc}")
-        if st and st != state:
+            raise EklaseAuthError("No authorization code in login callback")
+        if st != state:
             raise EklaseAuthError("State mismatch (possible CSRF / broken flow)")
 
-        # 5) Exchange code for tokens
+        # Exchange code for tokens
         token_form = {
             "grant_type": "authorization_code",
             "code": code,
@@ -225,8 +201,7 @@ class EklaseApiClient:
         }
         async with self._s.post(TOKEN_URL, data=token_form) as r:
             if r.status >= 400:
-                text = await r.text()
-                raise EklaseAuthError(f"Token exchange failed: HTTP {r.status}, body: {text[:400]!r}")
+                raise EklaseAuthError(f"Token exchange failed: HTTP {r.status}")
             js = await r.json()
 
         self._token = TokenSet(
