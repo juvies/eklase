@@ -98,6 +98,7 @@ class AuthTests(unittest.IsolatedAsyncioTestCase):
         return api.EklaseApiClient(session, 'test-user', 'test-password')
 
     async def test_complete_pkce_login(self):
+        self.assertEqual(api.REDIRECT_URI, 'https://family.e-klase.lv/')
         session = LoginSession()
         client = self.client(session)
         await client.ensure_token()

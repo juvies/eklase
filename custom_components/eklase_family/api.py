@@ -11,28 +11,101 @@ import urllib.parse
 import aiohttp
 
 
-# Published by https://family.e-klase.lv/api/auth-config and its OIDC discovery URL.
+# Published by https://my.e-klase.lv/family/api/auth-config and its OIDC discovery URL.
 AUTH_BASE = "https://auth.e-klase.lv/connect"
 AUTH_URL = f"{AUTH_BASE}/authorize"
 LOGIN_URL = f"{AUTH_BASE}/login"
 CSRF_URL = f"{LOGIN_URL}/token"
 TOKEN_URL = f"{AUTH_BASE}/token"
 
-API_BASE = "https://family.e-klase.lv/api"
-PROFILES_URL = f"{API_BASE}/user/profiles"
+API_BASE = "https://my.e-klase.lv/family/api"
+PROFILES_URL = f"{API_BASE}/user/profiles/by-year"
 SWITCH_URL = f"{API_BASE}/user/profiles/switch"
 SYNC_URL = f"{API_BASE}/user/profiles/sync"
 DIARY_URL = f"{API_BASE}/diary"
 
-REDIRECT_URI = "https://family.e-klase.lv/redirect.html"
+REDIRECT_URI = "https://family.e-klase.lv/"
 CLIENT_ID = "web"
 
 REDIRECT_HOST = "family.e-klase.lv"
-REDIRECT_PATH = "/redirect.html"
+REDIRECT_PATH = "/"
 
 
 class EklaseAuthError(Exception):
     """Authentication or authorization failed."""
+
+
+class EklaseApiError(Exception):
+    """The Family API response cannot be used safely."""
+
+
+def _active_profiles(payload: Any) -> list[dict[str, Any]]:
+    """Adapt the current study year's profiles to the existing calendar model."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("studyYears"), list):
+        raise EklaseApiError("Unexpected profiles response: missing studyYears list")
+    years = payload["studyYears"]
+    if not all(isinstance(year, dict) for year in years):
+        raise EklaseApiError("Unexpected study year format")
+    current = [year for year in years if year.get("isCurrent") is True]
+    if len(current) != 1:
+        raise EklaseApiError("Expected one current study year in profiles response")
+    profiles = current[0].get("profiles")
+    if not isinstance(profiles, list):
+        raise EklaseApiError("Unexpected current study year profiles format")
+    if not profiles:
+        raise EklaseApiError("No active student profiles in the current study year")
+
+    result = []
+    seen: dict[str, Any] = {}
+    for profile in profiles:
+        if not isinstance(profile, dict):
+            raise EklaseApiError("Unexpected student profile format")
+        identity = profile.get("identity")
+        user = profile.get("user")
+        if not isinstance(identity, dict) or not isinstance(user, dict):
+            raise EklaseApiError("Student profile is missing identity or user")
+        for field in ("profileId", "classId"):
+            value = identity.get(field)
+            if isinstance(value, bool) or not isinstance(value, (str, int)) or value == "":
+                raise EklaseApiError(f"Student identity is missing a valid {field}")
+        pid = str(identity["profileId"])
+        if pid in seen:
+            if seen[pid] != identity["classId"]:
+                raise EklaseApiError("Multiple active classes for the same profile are not supported")
+            continue
+        seen[pid] = identity["classId"]
+        result.append({
+            "profileId": identity["profileId"],
+            "classId": identity["classId"],
+            "firstName": user.get("firstName") or "",
+            "lastName": user.get("lastName") or "",
+            "studentDescription": ", ".join(
+                value for value in (user.get("className"), user.get("schoolName")) if value
+            ),
+        })
+    return result
+
+
+def _validate_diary(payload: Any) -> list[dict[str, Any]]:
+    """Reject changed response envelopes instead of publishing an empty calendar."""
+    if not isinstance(payload, list):
+        raise EklaseApiError("Unexpected diary response: expected a list of days")
+    for day in payload:
+        if not isinstance(day, dict) or not isinstance(day.get("date"), str):
+            raise EklaseApiError("Unexpected diary day format")
+        try:
+            date.fromisoformat(day["date"][:10])
+        except ValueError as ex:
+            raise EklaseApiError("Invalid diary date") from ex
+        lessons = day.get("lessons")
+        if lessons is None:
+            continue
+        if not isinstance(lessons, list) or not all(
+            isinstance(lesson, dict) and isinstance(lesson.get("classJournalName"), str)
+            for lesson in lessons
+        ):
+            raise EklaseApiError("Unexpected diary lessons format")
+    return payload
 
 
 def _b64url(data: bytes) -> str:
@@ -100,17 +173,20 @@ class EklaseApiClient:
             return {}
         return {"Authorization": f"Bearer {self._token.access_token}"}
 
-    def _headers_for_profile(self, profile_id: str | None) -> dict[str, str]:
+    def _headers_for_profile(
+        self, profile_id: str | int | None, class_id: str | int | None
+    ) -> dict[str, str]:
         h = dict(self._auth_headers())
-        if profile_id:
-            # šo neliekam auth endpointos, tikai FAMILY API endpointos
+        if profile_id is not None and class_id is not None:
+            # Both parts of the identity are required, and only on Family requests.
             h["x-profile-id"] = str(profile_id)
+            h["x-class-id"] = str(class_id)
         return h
 
     async def _follow_redirects_for_code(self, url: str, max_hops: int = 15) -> str:
         """
         Follow GET redirects until we reach:
-          https://family.e-klase.lv/redirect.html?code=...&state=...
+          https://family.e-klase.lv/?code=...&state=...
 
         Returns the final URL that contains code.
         """
@@ -212,64 +288,54 @@ class EklaseApiClient:
 
     # ---------- FAMILY API ----------
 
+    async def _request(
+        self, method: str, url: str, *, profile_id: str | int | None = None,
+        class_id: str | int | None = None, read_json: bool = True, **kwargs: Any,
+    ) -> Any:
+        """Retry once after a rejected token, retaining the full profile identity."""
+        for attempt in range(2):
+            await self.ensure_token()
+            request = self._s.get if method == "GET" else self._s.post
+            async with request(
+                url, headers=self._headers_for_profile(profile_id, class_id), **kwargs
+            ) as response:
+                if response.status == 401 and attempt == 0:
+                    self._token = None
+                    continue
+                response.raise_for_status()
+                return await response.json() if read_json else None
+
+    async def sync_profiles(self) -> None:
+        """The new UI synchronizes all profiles before fetching them by year."""
+        try:
+            await self._request("POST", SYNC_URL, read_json=False)
+        except aiohttp.ClientError:
+            # The UI also continues to fetch profiles after a failed sync.
+            pass
+
     async def get_profiles_raw(self) -> dict[str, Any]:
-        await self.ensure_token()
-        async with self._s.get(PROFILES_URL, headers=self._auth_headers()) as r:
-            if r.status == 401:
-                self._token = None
-                await self.ensure_token()
-                async with self._s.get(PROFILES_URL, headers=self._auth_headers()) as r2:
-                    r2.raise_for_status()
-                    return await r2.json()
-            r.raise_for_status()
-            return await r.json()
+        await self.sync_profiles()
+        return await self._request("GET", PROFILES_URL)
 
     async def get_active_profiles(self) -> list[dict[str, Any]]:
-        js = await self.get_profiles_raw()
-        return js.get("activeProfiles", []) or []
+        return _active_profiles(await self.get_profiles_raw())
 
-    async def switch_profile(self, profile_id: str) -> None:
-        await self.ensure_token()
-        payload = {"profileId": str(profile_id)}
+    async def switch_profile(self, profile_id: str | int, class_id: str | int) -> None:
+        await self._request(
+            "POST", SWITCH_URL, profile_id=profile_id, class_id=class_id,
+            json={"profileId": profile_id, "classId": class_id}, read_json=False,
+        )
 
-        async with self._s.post(SWITCH_URL, json=payload, headers=self._headers_for_profile(profile_id)) as r:
-            if r.status == 401:
-                self._token = None
-                await self.ensure_token()
-                async with self._s.post(SWITCH_URL, json=payload, headers=self._headers_for_profile(profile_id)) as r2:
-                    r2.raise_for_status()
-                    return
-            r.raise_for_status()
+    async def get_diary(
+        self, profile_id: str | int, from_date: date, to_date: date, *,
+        class_id: str | int,
+    ) -> list[dict[str, Any]]:
+        payload = await self._request(
+            "GET", DIARY_URL, profile_id=profile_id, class_id=class_id,
+            params={"from": from_date.isoformat(), "to": to_date.isoformat()},
+        )
+        return _validate_diary(payload)
 
-    async def sync_profile(self, profile_id: str) -> None:
-        """
-        Best-effort: UI calls before getting diary, but if it fails, we can still get the diary (maybe just a bit stale).
-        if sync fails, then likely the diary will also fail, but if it succeeds, then the diary should be up-to-date.
-        """
-        await self.ensure_token()
-        payload = {"profileId": str(profile_id)}
-
-        try:
-            async with self._s.post(SYNC_URL, json=payload, headers=self._headers_for_profile(profile_id)) as r:
-                # 2xx ok; 4xx/5xx ignore as best-effort
-                return
-        except Exception:
-            return
-
-    async def get_diary(self, profile_id: str, from_date: date, to_date: date) -> list[dict[str, Any]]:
-        await self.ensure_token()
-        params = {"from": from_date.isoformat(), "to": to_date.isoformat()}
-
-        async with self._s.get(DIARY_URL, params=params, headers=self._headers_for_profile(profile_id)) as r:
-            if r.status == 401:
-                self._token = None
-                await self.ensure_token()
-                async with self._s.get(DIARY_URL, params=params, headers=self._headers_for_profile(profile_id)) as r2:
-                    r2.raise_for_status()
-                    return await r2.json()
-            r.raise_for_status()
-            return await r.json()
-        
     def set_credentials(self, username: str, password: str) -> None:
         username = (username or "").strip()
         password = (password or "").strip()

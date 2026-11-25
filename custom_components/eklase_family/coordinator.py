@@ -104,8 +104,10 @@ class EklaseCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             for p in profiles:
                 pid = str(p["profileId"])
-                await self._client.switch_profile(pid)
-                diary = await self._client.get_diary(pid, frm, to)
+                await self._client.switch_profile(p["profileId"], p["classId"])
+                diary = await self._client.get_diary(
+                    p["profileId"], frm, to, class_id=p["classId"]
+                )
                 diary_by_profile[pid] = diary
 
             sizes = {pid: len(diary or []) for pid, diary in diary_by_profile.items()}

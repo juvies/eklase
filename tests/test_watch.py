@@ -9,6 +9,7 @@ import logging
 from types import SimpleNamespace as NS
 from typing import Any
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from test_student_schedules import ROOT, load_definitions
 
@@ -19,7 +20,8 @@ compare = watch.compare_first_lessons
 START = date(2026, 9, 8)
 DAY = '2026-09-09'
 TIMES = [{'start': '08:30'}, {'start': '09:20'}, {'start': '10:10'}]
-PROFILES = [{'profileId': '1', 'firstName': 'Anna'}, {'profileId': '2', 'firstName': 'Janis'}]
+PROFILES = [{'profileId': '1', 'classId': '11', 'firstName': 'Anna'},
+            {'profileId': '2', 'classId': '22', 'firstName': 'Janis'}]
 
 
 def diary(numbers, day=DAY):
@@ -129,10 +131,11 @@ class Client:
     async def get_active_profiles(self):
         return PROFILES[:1]
 
-    async def switch_profile(self, pid):
-        pass
+    async def switch_profile(self, pid, class_id):
+        self.identity = (pid, class_id)
 
-    async def get_diary(self, pid, frm, to):
+    async def get_diary(self, pid, frm, to, *, class_id):
+        assert self.identity == (pid, class_id)
         self.requested = (frm, to)
         return self.current
 
@@ -198,3 +201,20 @@ class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
         await c._async_update_data()
         self.assertEqual(c._prev, previous)
         self.assertEqual(self.events, [])
+
+    async def test_api_failure_preserves_previous_data_and_watch_baseline(self):
+        c = self.coordinator
+        c.data = await c._async_update_data()
+        data = deepcopy(c.data)
+        baseline = deepcopy(c._prev)
+        stored = deepcopy(c._store.value)
+        for method in ('get_active_profiles', 'get_diary'):
+            with self.subTest(method=method), patch.object(
+                c._client, method, AsyncMock(side_effect=ValueError('Unexpected API format'))
+            ):
+                with self.assertRaisesRegex(RuntimeError, 'Unexpected API format'):
+                    await c._async_update_data()
+            self.assertEqual(c.data, data)
+            self.assertEqual(c._prev, baseline)
+            self.assertEqual(c._store.value, stored)
+            self.assertEqual(self.events, [])

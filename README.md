@@ -25,6 +25,21 @@ Notikuma **Description** laukā tiek ielikts:
 
 ## Instalēšana
 
+### Jaunā E-klases API atbalsts (v0.1.5)
+
+Integrācija izmanto `https://my.e-klase.lv/family/api` un nolasa aktīvos
+skolēnus no pašreizējā mācību gada (`/user/profiles/by-year`). Skolēna izvēlē
+un dienasgrāmatas pieprasījumos tiek nodots gan profila, gan klases ID.
+Esošie individuālie stundu laiki paliek piesaistīti profila ID.
+
+Ja API atbilde neatbilst gaidītajam formātam vai pašreizējā mācību gadā nav
+aktīvu profilu, integrācija ziņo par ielādes kļūdu. Tā vairs neuzrāda šādu
+situāciju kā veiksmīgu ielādi ar tukšu kalendāru.
+
+Atjauninot esošu instalāciju, aizstāj integrācijas failus un restartē Home
+Assistant. Konts un stundu laiki nav jāievada atkārtoti. Pēc restarta pārbaudi
+kalendāra atribūtus `profiles_count`, `diary_days_by_profile` un `last_refresh`.
+
 ### Variants A — HACS (ieteicamais)
 
 1. Atver **HACS → Integrations**
